@@ -1,6 +1,0 @@
-{
-  "/page": "app/page.js",
-  "/api/filtered-comments/route": "app/api/filtered-comments/route.js",
-  "/api/comment-replies/route": "app/api/comment-replies/route.js",
-  "/api/debug/route": "app/api/debug/route.js"
-}
