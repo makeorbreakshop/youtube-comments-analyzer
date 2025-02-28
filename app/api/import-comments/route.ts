@@ -221,10 +221,7 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       console.error('Error importing comments:', error);
-      return NextResponse.json(
-        { error: `Failed to import comments: ${error instanceof Error ? error.message : 'Unknown error'}` },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to import comments' }, { status: 500 });
     }
   }
   // Invalid request
