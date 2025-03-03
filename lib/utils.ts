@@ -11,7 +11,9 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function createMarkup(html: string) {
   // Use DOMPurify if available (client-side)
-  if (typeof DOMPurify !== 'undefined') {
+  if (typeof window !== 'undefined') {
+    // Use dynamic import to avoid SSR issues
+    const DOMPurify = require('dompurify');
     return { 
       __html: DOMPurify.sanitize(html || '', {
         ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'br', 'p'],

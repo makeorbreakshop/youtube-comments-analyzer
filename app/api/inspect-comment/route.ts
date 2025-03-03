@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       comment,
       repliesFound: replies?.length || 0,
       replies: replies || [],
-      anyRepliesInDb: count > 0
+      anyRepliesInDb: count !== null && count > 0
     });
   } catch (error) {
     console.error("Error inspecting comment:", error);
