@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { fetchChannelInfo } from "@/lib/youtube";
 import { prisma } from "@/lib/prisma";
+import { YouTubeChannel } from "@/lib/types";
 
 export async function GET() {
   const session = await getServerSession();
@@ -49,7 +50,7 @@ export async function POST() {
     }
 
     // Upsert channels to database
-    const channelPromises = channels.map((channel) =>
+    const channelPromises = channels.map((channel: YouTubeChannel) =>
       prisma.channel.upsert({
         where: { channelId: channel.id },
         update: {
