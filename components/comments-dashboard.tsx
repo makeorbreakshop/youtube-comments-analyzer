@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Search, Calendar, ChevronDown, Bookmark } from 'lucide-react';
-import CommentsList from './comments-list';
+import { CommentsList } from './comments-list';
 
 interface Comment {
   id: string;

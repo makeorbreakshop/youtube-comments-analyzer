@@ -15,24 +15,26 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   
+  // Define fetchChannels outside of useEffect so it can be used elsewhere
+  async function fetchChannels() {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('channels')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setChannels(data || []);
+    } catch (error) {
+      console.error('Error fetching channels:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+  
   // Fetch channels when component mounts
   useEffect(() => {
-    async function fetchChannels() {
-      try {
-        const { data, error } = await supabase
-          .from('channels')
-          .select('*')
-          .order('created_at', { ascending: false });
-        
-        if (error) throw error;
-        setChannels(data || []);
-      } catch (error) {
-        console.error('Error fetching channels:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    
     fetchChannels();
   }, []);
   
