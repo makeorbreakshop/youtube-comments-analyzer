@@ -13,7 +13,7 @@ export async function GET() {
     
     if (resetError) {
       console.error('Error resetting reply counts:', resetError);
-      return NextResponse.json({ error: resetError.message }, { status: 500 });
+      return NextResponse.json({ error: resetError instanceof Error ? resetError.message : 'An unknown error occurred' }, { status: 500 });
     }
     
     // 2. Get top-level comments (up to 1000 for processing)
@@ -25,7 +25,7 @@ export async function GET() {
     
     if (commentError) {
       console.error('Error fetching top-level comments:', commentError);
-      return NextResponse.json({ error: commentError.message }, { status: 500 });
+      return NextResponse.json({ error: commentError instanceof Error ? commentError.message : 'An unknown error occurred' }, { status: 500 });
     }
     
     let updatedCount = 0;

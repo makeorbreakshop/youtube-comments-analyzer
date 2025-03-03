@@ -16,6 +16,14 @@ interface DatabaseReply {
   updated_at?: string;
 }
 
+// Force this route to be dynamic
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
+export const runtime = 'nodejs';
+export const preferredRegion = 'auto';
+export const maxDuration = 60;
+
 // Enhanced GET function to include correct reply counts and optionally include replies
 export async function GET(request: NextRequest) {
   try {

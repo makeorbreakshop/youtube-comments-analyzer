@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && node vercel.build.js",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate"
@@ -46,5 +46,8 @@
     "postcss": "^8.5.3",
     "prisma": "^5.0.0",
     "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

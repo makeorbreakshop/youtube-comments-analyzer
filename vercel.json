@@ -5,12 +5,12 @@
       "src": "package.json",
       "use": "@vercel/next",
       "config": {
-        "staticPageGenerationTimeout": 120,
+        "staticPageGenerationTimeout": 300,
         "api": {
           "memory": 3008,
-          "maxDuration": 60
+          "maxDuration": 300
         },
-        "buildCommand": "next build"
+        "buildCommand": "npm run build"
       }
     }
   ],
@@ -26,5 +26,8 @@
       "src": "/(.*)",
       "dest": "/$1"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 } 
