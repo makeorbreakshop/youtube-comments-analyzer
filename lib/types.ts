@@ -58,10 +58,12 @@ export interface YouTubeComment {
         textDisplay: string;
         likeCount: number;
         publishedAt: string;
+        updatedAt?: string;
       };
     };
-    videoTitle?: string; // Custom field we add
-    parentId?: string;   // Custom field for replies
+    videoTitle?: string;
+    parentId?: string;
+    totalReplyCount?: number;
   };
   replies?: {
     comments: Array<{
@@ -74,9 +76,26 @@ export interface YouTubeComment {
         textDisplay: string;
         likeCount: number;
         publishedAt: string;
+        updatedAt?: string;
       };
     }>;
   };
+}
+
+// Our internal format for YouTube comments used in the application
+export interface CustomYouTubeComment {
+  id: string;
+  videoId: string;
+  videoTitle: string;
+  authorName: string;
+  authorProfileUrl: string;
+  text: string;
+  likeCount: number;
+  publishedAt: string;
+  updatedAt: string;
+  totalReplyCount: number;
+  parentId?: string;
+  replies: CustomYouTubeComment[] | any[];
 }
 
 // Database models
@@ -128,6 +147,7 @@ export interface CommentData {
   replyCount: number;
   isHeartedByCreator?: boolean;
   isPinned?: boolean;
+  parentId?: string;
   replies?: CommentData[];
 }
 

@@ -5,7 +5,8 @@ import {
   YouTubeChannelResponse,
   YouTubeVideoResponse,
   YouTubeCommentResponse,
-  DbComment 
+  DbComment,
+  CustomYouTubeComment
 } from './types';
 import { supabase } from './supabase';
 import { CommentData, VideoData } from './types';
@@ -107,7 +108,7 @@ export async function fetchLatestChannelComments(
   includeOldVideos: boolean = false,
   maxComments: number = 1000,
   includeReplies: boolean = true
-): Promise<YouTubeComment[]> {
+): Promise<CustomYouTubeComment[]> {
   // Fetch videos first
   let videosResponse = await fetchVideosByChannel(channelId, apiKey);
   let processedVideos = videosResponse.items || [];
@@ -124,7 +125,7 @@ export async function fetchLatestChannelComments(
   }
   
   // Process each video to get comments
-  const allComments: YouTubeComment[] = [];
+  const allComments: CustomYouTubeComment[] = [];
   let fetchedCommentCount = 0;
   
   for (const video of processedVideos) {
@@ -134,8 +135,11 @@ export async function fetchLatestChannelComments(
     }
     
     try {
-      // Fix: Ensure videoId is properly accessed
-      const videoId = video.id?.videoId;
+      // Fix: Ensure videoId is properly accessed with type checking
+      const videoId = typeof video.id === 'object' && video.id?.videoId 
+        ? video.id.videoId 
+        : (typeof video.id === 'string' ? video.id : null);
+      
       if (!videoId) {
         console.warn('Missing videoId for video:', video);
         continue;
@@ -154,6 +158,15 @@ export async function fetchLatestChannelComments(
         
         const snippet = commentThread.snippet.topLevelComment.snippet;
         
+        // Fix for updatedAt property
+        const commentUpdatedAt = snippet.updatedAt || snippet.publishedAt;
+        
+        // Add proper types or handle missing totalReplyCount
+        const replyCount = commentThread.snippet?.totalReplyCount || 0;
+        
+        // Initialize with proper structure
+        const emptyReplies = [] as CustomYouTubeComment[]; // Properly typed now
+        
         // Add to our list
         allComments.push({
           id: commentThread.id,
@@ -162,37 +175,36 @@ export async function fetchLatestChannelComments(
           authorName: snippet.authorDisplayName,
           authorProfileUrl: snippet.authorProfileImageUrl,
           text: snippet.textDisplay,
-          likeCount: snippet.likeCount,
+          likeCount: snippet.likeCount || 0,
           publishedAt: snippet.publishedAt,
-          updatedAt: snippet.updatedAt || snippet.publishedAt, // Fallback if updatedAt missing
-          totalReplyCount: commentThread.snippet.totalReplyCount || 0,
-          replies: [] // Initialize empty array for replies
-        });
+          updatedAt: commentUpdatedAt,
+          totalReplyCount: replyCount,
+          replies: emptyReplies
+        } as CustomYouTubeComment);
         
         fetchedCommentCount++;
         
-        // Add replies if there are any and we want them
-        if (includeReplies && commentThread.replies?.comments) {
+        // If there are replies and we want to include them
+        if (includeReplies && commentThread.replies && 'comments' in commentThread.replies) {
+          // Process each reply
           for (const reply of commentThread.replies.comments) {
-            if (!reply?.snippet) {
-              console.warn('Malformed reply:', reply);
-              continue;
-            }
+            const replySnippet = reply.snippet;
             
+            // Add to our list as a separate comment with parentId
             allComments.push({
               id: reply.id,
               videoId: videoId,
               videoTitle: video.snippet?.title || 'Unknown Video',
-              authorName: reply.snippet.authorDisplayName,
-              authorProfileUrl: reply.snippet.authorProfileImageUrl,
-              text: reply.snippet.textDisplay,
-              likeCount: reply.snippet.likeCount || 0,
-              publishedAt: reply.snippet.publishedAt,
-              updatedAt: reply.snippet.updatedAt || reply.snippet.publishedAt, // Fallback
+              authorName: replySnippet.authorDisplayName,
+              authorProfileUrl: replySnippet.authorProfileImageUrl,
+              text: replySnippet.textDisplay,
+              likeCount: replySnippet.likeCount || 0,
+              publishedAt: replySnippet.publishedAt,
+              updatedAt: replySnippet.updatedAt || replySnippet.publishedAt, // Fallback
               totalReplyCount: 0,
               parentId: commentThread.id,
-              replies: []
-            });
+              replies: [] as CustomYouTubeComment[]
+            } as CustomYouTubeComment);
             
             fetchedCommentCount++;
           }
@@ -205,11 +217,22 @@ export async function fetchLatestChannelComments(
       }
     } catch (error) {
       // Just log and continue with next video
-      console.error(`Error fetching comments for video ${video.id?.videoId}:`, error);
+      console.error(`Error fetching comments for video ${getVideoId(video.id)}:`, error);
     }
   }
   
   return allComments;
+}
+
+// Helper function to safely get the videoId from different formats
+function getVideoId(id: string | { videoId: string } | { kind: string; videoId: string }): string {
+  if (typeof id === 'string') {
+    return id;
+  } else if ('videoId' in id) {
+    return id.videoId;
+  } else {
+    return 'unknown';
+  }
 }
 
 /**
@@ -220,10 +243,10 @@ export async function getCommentsForVideo(
   apiKey: string, 
   maxComments: number = -1,
   includeReplies: boolean = true
-) {
+): Promise<CustomYouTubeComment[]> {
   console.log(`Getting comments for video ${videoId}, including replies: ${includeReplies}`);
   
-  let comments: Record<string, any>[] = []; // Using Record<string, any> for flexibility
+  let comments: CustomYouTubeComment[] = []; // Using proper type
   let nextPageToken: string | undefined;
   let commentCount = 0;
   
@@ -234,22 +257,43 @@ export async function getCommentsForVideo(
     
     // Process each top-level comment
     for (const comment of videoComments) {
-      comments.push(comment);
+      // Convert YouTube API comment to our CustomYouTubeComment format
+      const customComment: CustomYouTubeComment = {
+        id: comment.id,
+        videoId: videoId,
+        videoTitle: 'Unknown Video', // We don't have the title here
+        authorName: comment.snippet.topLevelComment.snippet.authorDisplayName,
+        authorProfileUrl: comment.snippet.topLevelComment.snippet.authorProfileImageUrl,
+        text: comment.snippet.topLevelComment.snippet.textDisplay,
+        likeCount: comment.snippet.topLevelComment.snippet.likeCount || 0,
+        publishedAt: comment.snippet.topLevelComment.snippet.publishedAt,
+        updatedAt: comment.snippet.topLevelComment.snippet.updatedAt || comment.snippet.topLevelComment.snippet.publishedAt,
+        totalReplyCount: comment.snippet.totalReplyCount || 0,
+        replies: []
+      };
+      
+      comments.push(customComment);
       commentCount++;
       
       // Process replies if available and requested
-      if (includeReplies && comment.replies?.comments) {
+      if (includeReplies && comment.replies && 'comments' in comment.replies) {
         console.log(`Found ${comment.replies.comments.length} replies for comment ${comment.id}`);
         
         for (const reply of comment.replies.comments) {
-          // Ensure the reply has a properly formatted parent_id
-          const replyComment = {
-            ...reply,
-            snippet: {
-              ...reply.snippet,
-              parentId: comment.id,  // Explicitly set the parent ID to the top-level comment
-              videoId: videoId       // Ensure videoId is included
-            }
+          // Convert reply to CustomYouTubeComment format
+          const replyComment: CustomYouTubeComment = {
+            id: reply.id,
+            videoId: videoId,
+            videoTitle: 'Unknown Video',
+            authorName: reply.snippet.authorDisplayName,
+            authorProfileUrl: reply.snippet.authorProfileImageUrl,
+            text: reply.snippet.textDisplay,
+            likeCount: reply.snippet.likeCount || 0,
+            publishedAt: reply.snippet.publishedAt,
+            updatedAt: reply.snippet.updatedAt || reply.snippet.publishedAt,
+            totalReplyCount: 0,
+            parentId: comment.id,
+            replies: []
           };
           
           comments.push(replyComment);
@@ -277,29 +321,43 @@ export async function getCommentsForVideo(
 }
 
 // Updated mapYouTubeCommentToDbComment function with more robust type checking
-export function mapYouTubeCommentToDbComment(comment: Record<string, any>, channelId: string): DbComment {
+export function mapYouTubeCommentToDbComment(comment: YouTubeComment | CustomYouTubeComment | Record<string, any>, channelId: string): DbComment {
   // Very explicitly extract parentId from all possible locations
   let parentId = null;
   
+  // Handle CustomYouTubeComment format
+  if ('authorName' in comment && 'text' in comment) {
+    // This is our CustomYouTubeComment format
+    return {
+      comment_id: comment.id,
+      video_id: comment.videoId,
+      author_name: comment.authorName,
+      author_profile_url: comment.authorProfileUrl,
+      text: comment.text,
+      like_count: comment.likeCount,
+      published_at: comment.publishedAt,
+      updated_at: comment.updatedAt,
+      channel_id: channelId,
+      is_owner_comment: false, // Default
+      parent_id: comment.parentId || null,
+      video_title: comment.videoTitle || ''
+    };
+  }
+  
+  // Handle standard YouTube API format
   // First check if it's in snippet.parentId
   if (comment.snippet?.parentId) {
     parentId = comment.snippet.parentId;
-    console.log(`Found parentId in snippet.parentId: ${parentId}`);
   } 
   // Then check reply structure
   else if (comment.snippet?.topLevelComment?.id && comment.id !== comment.snippet.topLevelComment.id) {
     parentId = comment.snippet.topLevelComment.id;
-    console.log(`Found parentId from topLevelComment: ${parentId}`);
   }
   
   // If this is a direct API reply, it might be structured differently
   if (comment.snippet?.type === 'reply' && comment.snippet?.parentId) {
     parentId = comment.snippet.parentId;
-    console.log(`Found parentId from reply type: ${parentId}`);
   }
-  
-  // Log mapping for debugging
-  console.log(`Mapping comment ${comment.id}, parentId: ${parentId || 'NONE (top-level)'}`);
   
   // Ensure we have proper access to all required properties
   const topLevelSnippet = comment.snippet?.topLevelComment?.snippet;

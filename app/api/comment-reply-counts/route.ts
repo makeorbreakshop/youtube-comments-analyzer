@@ -9,23 +9,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Valid comment IDs array is required' }, { status: 400 });
     }
     
-    // Get reply counts from database
+    // Get all replies for these parent IDs
     const { data, error } = await supabase
       .from('comments')
-      .select('parent_id, count')
-      .in('parent_id', commentIds)
-      .group('parent_id');
+      .select('parent_id')
+      .in('parent_id', commentIds);
     
     if (error) {
       console.error('Error fetching reply counts:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
     }
     
-    // Convert to dictionary mapping comment ID to count
-    const counts = data.reduce((acc, item) => {
-      acc[item.parent_id] = parseInt(item.count);
-      return acc;
-    }, {});
+    // Count replies for each parent ID
+    const counts: Record<string, number> = {};
+    
+    // Initialize all requested IDs with 0
+    commentIds.forEach((id: string) => {
+      counts[id] = 0;
+    });
+    
+    // Count occurrences
+    if (data) {
+      data.forEach((item: { parent_id: string }) => {
+        counts[item.parent_id] = (counts[item.parent_id] || 0) + 1;
+      });
+    }
     
     return NextResponse.json({ counts });
   } catch (error) {

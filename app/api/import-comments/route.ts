@@ -20,23 +20,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function GET_REPLIES(request: NextRequest) {
-  const body = await request.json();
-  const { commentId } = body;
-  
-  if (!commentId) {
-    return NextResponse.json({ error: 'Comment ID is required' }, { status: 400 });
-  }
-  
-  try {
-    const replies = await getCommentReplies(commentId);
-    return NextResponse.json({ replies });
-  } catch (error) {
-    console.error('Error fetching replies:', error);
-    return NextResponse.json({ error: 'Failed to fetch replies' }, { status: 500 });
-  }
-}
-
 export async function POST(request: Request) {
   // First determine what type of request this is
   const body = await request.json();

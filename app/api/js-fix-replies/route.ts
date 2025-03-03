@@ -23,9 +23,9 @@ export async function GET() {
     console.log(`Processing ${replies.length} replies...`);
     
     // 3. Process parent IDs and build a map of parent ID to count
-    const parentIdMap = new Map();
-    const nonDotParentIds = new Set();
-    const dotParentIds = new Set();
+    const parentIdMap = new Map<string, number>();
+    const nonDotParentIds = new Set<string>();
+    const dotParentIds = new Set<string>();
     
     // Analyze the format and build counts
     for (const reply of replies) {
@@ -50,9 +50,11 @@ export async function GET() {
     // 4. Update reply counts for all parent comments
     let updatedCount = 0;
     let notFoundCount = 0;
-    let sampleNotFound = [];
+    const sampleNotFound: string[] = [];
     
-    for (const [parentId, count] of parentIdMap.entries()) {
+    // Process parents sequentially to avoid async issues
+    const parentEntries = Array.from(parentIdMap.entries());
+    for (const [parentId, count] of parentEntries) {
       // Check if this parent exists
       const { data: parentExists, error: checkError } = await supabase
         .from('comments')
@@ -112,7 +114,7 @@ export async function GET() {
     console.error('Error in JavaScript fix:', error);
     return NextResponse.json({
       success: false,
-      error: error.message
+      error: error instanceof Error ? error.message : 'An unknown error occurred'
     }, { status: 500 });
   }
 } 
