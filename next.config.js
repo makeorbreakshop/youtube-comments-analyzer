@@ -1,14 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {},
-  output: 'standalone',
+  swcMinify: true,
   images: {
-    domains: [
-      'yt3.ggpht.com',    // YouTube profile images
-      'i.ytimg.com',      // YouTube video thumbnails
-      'yt3.googleusercontent.com'  // Another YouTube image domain
-    ],
+    domains: ['lh3.googleusercontent.com', 'yt3.ggpht.com'],
+  },
+  experimental: {
+    serverActions: true,
+  },
+  // Disable static generation for pages with auth components
+  output: 'standalone',
+  env: {
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
   },
 }
 

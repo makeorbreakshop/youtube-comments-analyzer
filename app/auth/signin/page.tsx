@@ -2,8 +2,10 @@
 
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
-export default function SignIn() {
+// Client component that uses useSearchParams
+function SignInContent() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
 
@@ -25,5 +27,20 @@ export default function SignIn() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main component with suspense boundary
+export default function SignIn() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">
+        <div className="w-full max-w-md space-y-8 text-center">
+          Loading...
+        </div>
+      </div>
+    }>
+      <SignInContent />
+    </Suspense>
   );
 } 

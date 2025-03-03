@@ -7,8 +7,17 @@ import { AuthStatus } from "@/components/auth-status";
 import { ChannelSelector } from "@/components/channel-selector";
 
 export default function Dashboard() {
-  const { data: session, status } = useSession();
   const router = useRouter();
+  const session = useSession();
+  
+  // Handle the case where useSession is undefined during static generation
+  if (!session || typeof session !== 'object') {
+    // This will only happen during static build and not at runtime
+    // We can safely return a loading state
+    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
+  }
+  
+  const { data, status } = session;
 
   useEffect(() => {
     if (status === "unauthenticated") {

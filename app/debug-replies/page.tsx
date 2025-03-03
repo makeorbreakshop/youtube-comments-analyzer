@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 // Add type definitions for the debug data structure
@@ -122,7 +122,8 @@ function CommentDebugItem({ comment, onSelect }: { comment: any, onSelect: (id: 
   );
 }
 
-const DebugRepliesPage = () => {
+// Client component that uses useSearchParams
+function DebugRepliesContent() {
   const searchParams = useSearchParams();
   const [commentId, setCommentId] = useState(searchParams.get('commentId') || '');
   const [loading, setLoading] = useState(false);
@@ -365,6 +366,20 @@ const DebugRepliesPage = () => {
       )}
     </div>
   );
-};
+}
 
-export default DebugRepliesPage; 
+// Main component with suspense boundary
+export default function DebugRepliesPage() {
+  return (
+    <Suspense fallback={
+      <div className="container mx-auto py-6 px-4">
+        <h1 className="text-2xl font-bold mb-8">Comment Debug Tool</h1>
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8 text-center">
+          Loading...
+        </div>
+      </div>
+    }>
+      <DebugRepliesContent />
+    </Suspense>
+  );
+} 
