@@ -36,7 +36,7 @@ export async function GET() {
         .limit(10);
       
       parentWithReplies = parent;
-      replies = relatedReplies;
+      replies = relatedReplies ?? [];
     }
     
     return NextResponse.json({
@@ -44,7 +44,7 @@ export async function GET() {
       replyCount,
       sampleReplies,
       diagnosticResult: {
-        hasReplies: replyCount > 0,
+        hasReplies: replyCount !== null && replyCount > 0,
         sampleParent: parentWithReplies,
         sampleReplies: replies
       }

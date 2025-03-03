@@ -1,15 +1,43 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { AuthStatus } from "@/components/auth-status";
-import { CommentsList } from "@/components/comments-list";
+import CommentsList from "@/components/CommentsList";
 import { Button } from "@/components/ui/button";
 
 interface ChannelPageProps {
   params: {
     channelId: string;
   };
+}
+
+// Client-side component to handle fetching comments
+function ClientSideCommentsList({ channelId }: { channelId: string }) {
+  const [comments, setComments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    async function fetchComments() {
+      try {
+        const response = await fetch(`/api/comments?channelId=${channelId}`);
+        const data = await response.json();
+        setComments(data.comments || []);
+      } catch (error) {
+        console.error('Error fetching comments:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchComments();
+  }, [channelId]);
+  
+  return <CommentsList comments={comments} loading={loading} />;
 }
 
 export default async function ChannelPage({ params }: ChannelPageProps) {
@@ -66,7 +94,7 @@ export default async function ChannelPage({ params }: ChannelPageProps) {
           </div>
           
           <div className="space-y-8">
-            <CommentsList channelId={channelId} />
+            <ClientSideCommentsList channelId={channelId} />
           </div>
         </div>
       </main>

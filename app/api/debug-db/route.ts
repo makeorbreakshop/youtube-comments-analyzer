@@ -30,10 +30,10 @@ export async function GET(request: NextRequest) {
         .eq('channel_id', channel.id)
         .limit(5);
         
-      channelComments = comments;
-      commentCount = count;
+      channelComments = comments ?? [];
+      commentCount = count ?? 0;
       
-      console.log(`Found ${count} comments for channel UUID ${channel.id}`);
+      console.log(`Found ${count ?? 0} comments for channel UUID ${channel.id}`);
     }
     
     // Also try direct YouTube channel ID lookup for comparison

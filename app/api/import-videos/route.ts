@@ -69,14 +69,29 @@ export async function POST(request: Request) {
     console.log(`Found ${videos.length} total videos for channel`);
     
     // Map videos to the database format
-    const videosToInsert = videos.map(video => ({
-      video_id: video.id?.videoId || video.snippet?.resourceId?.videoId,
-      title: video.snippet.title,
-      description: video.snippet.description || "",
-      thumbnail_url: video.snippet.thumbnails?.default?.url || "",
-      published_at: new Date(video.snippet.publishedAt),
-      channel_id: dbChannelId
-    }));
+    const videosToInsert = videos.map(video => {
+      // Extract video ID based on different possible structures
+      let videoId: string;
+      if (typeof video.id === 'string') {
+        videoId = video.id;
+      } else if (video.id && typeof video.id === 'object' && 'videoId' in video.id) {
+        videoId = video.id.videoId;
+      } else if (video.snippet?.resourceId?.videoId) {
+        videoId = video.snippet.resourceId.videoId;
+      } else {
+        videoId = '';
+        console.warn('Could not extract video ID from video:', video);
+      }
+      
+      return {
+        video_id: videoId,
+        title: video.snippet.title,
+        description: video.snippet.description || "",
+        thumbnail_url: video.snippet.thumbnails?.default?.url || "",
+        published_at: new Date(video.snippet.publishedAt),
+        channel_id: dbChannelId
+      };
+    });
     
     console.log(`Prepared ${videosToInsert.length} videos for insertion`);
     

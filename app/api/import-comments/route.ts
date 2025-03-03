@@ -114,7 +114,7 @@ export async function POST(request: Request) {
       );
       
       // Extract all video IDs from comments
-      const videoIds = Array.from(new Set(comments.map(comment => comment.snippet.videoId)));
+      const videoIds = Array.from(new Set(comments.map(comment => comment.videoId)));
       // Ensure all videos exist in the database before importing comments
       await Promise.all(videoIds.map(async (videoId) => {
         // Check if video exists in database
