@@ -4,4 +4,4 @@ export const fetchCache = 'force-no-store';
 export const revalidate = 0;
 export const runtime = 'nodejs';
 export const preferredRegion = 'auto';
-export const maxDuration = 120; // Increase maximum duration to 120 seconds 
+export const maxDuration = 60; // Maximum duration allowed in Hobby plan 

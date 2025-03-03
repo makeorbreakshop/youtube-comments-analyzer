@@ -7,7 +7,7 @@ export const fetchCache = 'force-no-store';
 export const revalidate = 0;
 export const runtime = 'nodejs';
 export const preferredRegion = 'auto';
-export const maxDuration = 300; // Longer timeout for this specific route (5 minutes)
+export const maxDuration = 60; // Updated to 60 seconds (maximum allowed in Hobby plan)
 
 export async function GET() {
   try {
