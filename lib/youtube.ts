@@ -380,6 +380,11 @@ export function mapYouTubeCommentToDbComment(comment: YouTubeComment | CustomYou
 
 // Enhanced mapping function that handles all possible properties
 export function mapDbCommentToCommentData(dbComment: Record<string, any>): CommentData {
+  // Explicitly check for reply_count and cast it to a number
+  const replyCount = typeof dbComment.reply_count === 'number' 
+    ? dbComment.reply_count
+    : (dbComment.reply_count ? Number(dbComment.reply_count) : 0);
+  
   return {
     id: dbComment.comment_id,
     authorDisplayName: dbComment.author_name || 'Unknown User',
@@ -390,7 +395,7 @@ export function mapDbCommentToCommentData(dbComment: Record<string, any>): Comme
     updatedAt: dbComment.updated_at || dbComment.published_at,
     videoId: dbComment.video_id,
     videoTitle: dbComment.video_title || '',
-    replyCount: dbComment.reply_count || 0,
+    replyCount: replyCount,
     isHeartedByCreator: false,
     isPinned: false,
     parentId: dbComment.parent_id,

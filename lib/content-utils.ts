@@ -1,15 +1,33 @@
 import DOMPurify from 'dompurify';
 
-export function sanitizeAndRenderHtml(htmlContent: string) {
-  if (!htmlContent) return { __html: '' };
+/**
+ * Sanitizes and prepares HTML content for rendering
+ * Simple implementation to handle common issues in comment text
+ */
+export function sanitizeAndRenderHtml(html: string) {
+  if (!html) return { __html: '' };
   
-  // Sanitize the HTML content using DOMPurify
-  const sanitizedContent = DOMPurify.sanitize(htmlContent, {
-    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br'],
-    ALLOWED_ATTR: ['href', 'target', 'rel']
-  });
+  // Basic sanitization
+  let sanitized = html
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
   
-  return { __html: sanitizedContent };
+  // Convert line breaks to <br>
+  sanitized = sanitized.replace(/\n/g, '<br />');
+  
+  // Handle YouTube @mentions
+  sanitized = sanitized.replace(
+    /@@([a-zA-Z0-9_-]+)/g, 
+    '<span class="text-blue-600">@$1</span>'
+  );
+  
+  // Handle URLs
+  sanitized = sanitized.replace(
+    /(https?:\/\/[^\s]+)/g, 
+    '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">$1</a>'
+  );
+  
+  return { __html: sanitized };
 }
 
 export const convertHtmlToText = (content: string): string => {

@@ -1,23 +1,13 @@
 "use client";
 import React from 'react';
 import CommentAnalytics from '@/components/CommentAnalytics';
-import { tokens } from '@/lib/design-system';
 
 export default function Home() {
-  const channelId = "UCjWkNxpp3UHdEavpM_19--Q"; // Example channel ID
+  const channelId = "UCjWkNxpp3UHdEavpM_19--Q";
   
   return (
-    <div className="container">
-      <main>
-        <div className="mb-6">
-          <h2 className={tokens.typography.title.section}>Comment Analysis</h2>
-          <p className="mt-2 text-lg text-gray-600">
-            Analyze and understand your YouTube viewer feedback
-          </p>
-        </div>
-        
-        <CommentAnalytics channelId={channelId} />
-      </main>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <CommentAnalytics channelId={channelId} />
     </div>
   );
 } 

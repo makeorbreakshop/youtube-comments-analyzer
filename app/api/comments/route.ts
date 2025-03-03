@@ -128,13 +128,13 @@ async function getFilteredComments(
           
           // Sort by reply count in JavaScript to ensure correct direction
           const sortedCommentIds = commentsByReplyCount
-            .sort((a, b) => {
+            .sort((a: { reply_count: number, comment_id: string }, b: { reply_count: number, comment_id: string }) => {
               return sortDirection === 'asc' 
                 ? a.reply_count - b.reply_count 
                 : b.reply_count - a.reply_count;
             })
             .slice((page - 1) * perPage, page * perPage)
-            .map(c => c.comment_id);
+            .map((c: { comment_id: string }) => c.comment_id);
           
           console.log(`Using ${sortedCommentIds.length} comment IDs for this page`);
           
@@ -149,7 +149,7 @@ async function getFilteredComments(
             // Fallback to regular query
           } else {
             // Manually sort the comments to match the order of the IDs
-            const orderedComments = sortedCommentIds.map(id => 
+            const orderedComments = sortedCommentIds.map((id: string) => 
               sortedComments.find(comment => comment.comment_id === id)
             ).filter(Boolean);
             

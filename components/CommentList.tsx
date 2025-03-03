@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CommentData } from '../lib/types';
 import CommentItem from './CommentItem';
 import CommentText from './CommentText';
@@ -6,47 +6,67 @@ import { SimpleComment } from './SimpleComment';
 
 interface CommentListProps {
   channelId: string;
+  initialSortBy?: string;
+  initialSortDirection?: 'asc' | 'desc';
 }
 
-export function CommentList({ channelId }: CommentListProps) {
+export function CommentList({ 
+  channelId, 
+  initialSortBy = 'date', 
+  initialSortDirection = 'desc' 
+}: CommentListProps) {
   const [comments, setComments] = useState<CommentData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [sortBy, setSortBy] = useState('date');
-  const [sortDirection, setSortDirection] = useState('desc');
+  const [sortBy, setSortBy] = useState(initialSortBy);
+  const [sortDirection, setSortDirection] = useState(initialSortDirection);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [displayedComments, setDisplayedComments] = useState<CommentData[]>([]);
   const perPage = 50;
 
+  // Update sort settings if initialSort props change
   useEffect(() => {
-    fetchComments();
+    if (initialSortBy) setSortBy(initialSortBy);
+    if (initialSortDirection) setSortDirection(initialSortDirection);
+  }, [initialSortBy, initialSortDirection]);
+
+  useEffect(() => {
+    // Don't refetch if we're already loading
+    if (!isLoading) {
+      fetchComments();
+    }
   }, [channelId, sortBy, sortDirection, page]);
 
   async function fetchComments() {
     if (!channelId) return;
     
+    // Set a flag to prevent multiple fetches
     setIsLoading(true);
+    
     try {
-      console.log(`Fetching comments with sorting: ${sortBy} ${sortDirection}`);
-      const response = await fetch(
-        `/api/comments?channelId=${channelId}&page=${page}&perPage=${perPage}&sortBy=${sortBy}&sortDirection=${sortDirection}`
-      );
+      console.log(`Fetching comments for channel ${channelId} with sort: ${sortBy} ${sortDirection}`);
+      
+      const apiUrl = `/api/filtered-comments?channelId=${channelId}&page=${page}&perPage=${perPage}&sortBy=${sortBy}&sortDirection=${sortDirection}`;
+      
+      const response = await fetch(apiUrl);
       
       if (!response.ok) {
         throw new Error(`API returned status ${response.status}`);
       }
       
       const data = await response.json();
-      console.log(`Received ${data.comments?.length} comments`);
       
-      // Debug the first few comments
       if (data.comments?.length > 0) {
-        data.comments.slice(0, 5).forEach((comment, i) => {
-          console.log(`Comment ${i+1}: ID=${comment.id}, ReplyCount=${comment.replyCount}`);
-        });
+        setComments(data.comments);
+        setDisplayedComments(data.comments);
+        setTotalCount(data.totalCount);
+      } else {
+        if (data.comments !== undefined) {
+          setComments([]);
+          setDisplayedComments([]);
+          setTotalCount(data.totalCount || 0);
+        }
       }
-      
-      setComments(data.comments);
-      setTotalCount(data.totalCount);
     } catch (error) {
       console.error('Error fetching comments:', error);
     } finally {
@@ -54,7 +74,7 @@ export function CommentList({ channelId }: CommentListProps) {
     }
   }
 
-  function handleSortChange(newSortBy) {
+  function handleSortChange(newSortBy: string) {
     // If clicking the same sort, toggle direction
     if (newSortBy === sortBy) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -69,21 +89,43 @@ export function CommentList({ channelId }: CommentListProps) {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-4">Comments ({totalCount})</h2>
-      
-      <div className="space-y-4">
-        {comments.length > 0 ? (
-          comments.map((comment) => (
-            <CommentItem key={comment.id} comment={comment}>
-              {/* No need for nested CommentText since it's handled in CommentItem */}
-            </CommentItem>
-          ))
-        ) : (
-          <div className="text-center py-10 text-gray-500">
-            No comments found
-          </div>
-        )}
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold text-gray-900">
+          Comments ({totalCount.toLocaleString()})
+        </h2>
       </div>
+      
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {displayedComments.length > 0 ? (
+            displayedComments.map((comment) => (
+              <SimpleComment
+                key={comment.id}
+                comment={comment}
+              />
+            ))
+          ) : (
+            <div className="bg-white p-6 rounded-lg shadow-sm text-center">
+              <p className="text-gray-500">No comments found matching your criteria.</p>
+            </div>
+          )}
+          
+          {displayedComments.length > 0 && (
+            <div className="flex justify-center mt-6">
+              <button
+                onClick={() => setPage(page + 1)}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                Load More
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

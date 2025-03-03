@@ -28,15 +28,16 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
     
-    // Simple update query
-    const { error: updateError } = await supabase
+    // Use a direct SQL query
+    const { data: sqlResult, error: sqlError } = await supabase
       .from('comments')
-      .update({ reply_count: count || 0 })
-      .eq('id', oldData.id); // Use the primary key instead of comment_id
+      .update({ reply_count: count })
+      .eq('id', oldData.id)
+      .select();
     
-    if (updateError) {
+    if (sqlError) {
       return NextResponse.json({ 
-        error: `Error updating reply count: ${updateError.message}` 
+        error: `SQL error: ${sqlError.message}` 
       }, { status: 500 });
     }
     
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
     const { data: newData } = await supabase
       .from('comments')
       .select('*')
-      .eq('comment_id', commentId)
+      .eq('id', oldData.id)
       .single();
     
     return NextResponse.json({
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
         comment_id: newData.comment_id,
         reply_count: newData.reply_count
       } : null,
+      sqlResult,
       replyCount: count
     });
   } catch (error) {

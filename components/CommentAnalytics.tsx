@@ -286,6 +286,28 @@ export default function CommentAnalytics({ channelId }: CommentAnalyticsProps) {
   const COMMENTS_PER_PAGE = 50;
   const [totalComments, setTotalComments] = useState<number>(0);
   const [showReplyIds, setShowReplyIds] = useState<string[]>([]);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+  const [debouncedSortOption, setDebouncedSortOption] = useState(sortOption);
+  const [debouncedSortDirection, setDebouncedSortDirection] = useState(sortDirection);
+
+  // Debounce search query changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms delay
+    
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+  
+  // Debounce sort changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSortOption(sortOption);
+      setDebouncedSortDirection(sortDirection);
+    }, 300); // 300ms delay
+    
+    return () => clearTimeout(timer);
+  }, [sortOption, sortDirection]);
 
   useEffect(() => {
     const fetchVideos = async () => {
@@ -312,16 +334,16 @@ export default function CommentAnalytics({ channelId }: CommentAnalyticsProps) {
           `/api/filtered-comments?channelId=${channelId}` + 
           `&page=${page}` +
           `&perPage=${COMMENTS_PER_PAGE}` +
-          `&sortBy=${sortOption}` +
-          `&sortDirection=${sortDirection}` +
+          `&sortBy=${debouncedSortOption}` +
+          `&sortDirection=${debouncedSortDirection}` +
           (selectedVideo ? `&videoId=${selectedVideo}` : '') +
-          (searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '')
+          (debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '')
         );
         
         const data = await response.json();
         
-        // Add console logging to help debug
-        console.log('Fetched comments data:', data);
+        // Reduce console logging
+        console.log(`Fetched ${data.comments?.length || 0} comments`);
         
         if (data.comments) {
           setComments(data.comments);
@@ -339,7 +361,7 @@ export default function CommentAnalytics({ channelId }: CommentAnalyticsProps) {
     }
     
     fetchComments();
-  }, [channelId, selectedVideo, sortOption, sortDirection, searchQuery, page]);
+  }, [channelId, selectedVideo, debouncedSortOption, debouncedSortDirection, debouncedSearchQuery, page]);
 
   // Function to sort comments
   const sortComments = (commentsToSort: CommentData[], option: SortOption, direction: SortDirection): CommentData[] => {
@@ -526,11 +548,11 @@ export default function CommentAnalytics({ channelId }: CommentAnalyticsProps) {
   };
 
   return (
-    <div className={tokens.spacing.stack.default}>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Channel Comments</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Viewing {totalComments} comments from this channel
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Comment Analysis</h1>
+        <p className="mt-2 text-md text-gray-600">
+          Analyze and understand your YouTube viewer feedback
         </p>
       </div>
 
@@ -547,24 +569,30 @@ export default function CommentAnalytics({ channelId }: CommentAnalyticsProps) {
         setSortDirection={setSortDirection}
       />
       
+      {/* Channel Comments heading */}
+      <div className="mt-6">
+        <h2 className="text-xl font-bold text-gray-900">Channel Comments</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Viewing {totalComments.toLocaleString()} comments from this channel
+        </p>
+      </div>
+      
       {/* Comments Section */}
       {isLoading ? (
-        <div className={`${componentStyles.card.default} ${tokens.spacing.card.default} text-center py-16`}>
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em]" role="status">
+        <div className="bg-white rounded-lg shadow-sm p-10 text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent align-[-0.125em]" role="status">
             <span className="sr-only">Loading...</span>
           </div>
           <p className="mt-4 text-gray-500">Loading comments...</p>
         </div>
       ) : comments.length > 0 ? (
-        <div className={`${componentStyles.card.default} ${tokens.spacing.card.default}`}>
-          <div className="divide-y divide-gray-200">
-            {comments.map(comment => (
-              <SimpleComment key={comment.id} comment={comment} />
-            ))}
-          </div>
-        </div>
+        <CommentList 
+          channelId={channelId} 
+          initialSortBy={sortOption} 
+          initialSortDirection={sortDirection} 
+        />
       ) : (
-        <div className={`${componentStyles.card.default} ${tokens.spacing.card.default} text-center py-10`}>
+        <div className="bg-white rounded-lg shadow-sm p-10 text-center">
           <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
           </svg>

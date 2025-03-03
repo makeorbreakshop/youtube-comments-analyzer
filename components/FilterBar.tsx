@@ -26,61 +26,68 @@ export function FilterBar({
   setSortDirection
 }: FilterBarProps) {
   
-  // Handle video title truncation
-  const truncateTitle = (title: string, maxLength: number = 35) => {
-    if (!title) return '';
-    return title.length > maxLength ? title.substring(0, maxLength) + '...' : title;
+  const handleSortClick = (option: string) => {
+    if (option === sortBy) {
+      // If clicking the same sort option, toggle direction
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New sort type, set to descending by default
+      setSortBy(option);
+      setSortDirection('desc');
+    }
   };
 
   return (
-    <div className="mb-6 flex flex-col space-y-3 md:flex-row md:space-y-0 md:space-x-4">
-      <div className="flex-1">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search comments..."
-          className={componentStyles.input.default}
-        />
+    <div className="mb-8">
+      <div className="mb-4">
+        <div className="relative">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search comments..."
+            className="block w-full p-3 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 focus-visible:outline-none"
+          />
+        </div>
       </div>
       
-      <div className="w-full md:w-64">
-        <select
-          value={selectedVideo}
-          onChange={(e) => setSelectedVideo(e.target.value)}
-          className={componentStyles.input.default}
-          aria-label="Filter by video"
-        >
-          <option value="">All Videos</option>
-          {videos.map((video) => (
-            <option key={video.id} value={video.id}>
-              {truncateTitle(video.title || '')}
-            </option>
-          ))}
-        </select>
-      </div>
-      
-      <div className="w-full md:w-48">
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          className={componentStyles.input.default}
-          aria-label="Sort by"
-        >
-          <option value="date">Date</option>
-          <option value="likes">Likes</option>
-          <option value="replies">Replies</option>
-        </select>
-      </div>
-      
-      <div>
-        <button
-          onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
-          className={componentStyles.button.secondary}
-          aria-label={sortDirection === 'asc' ? 'Sort ascending' : 'Sort descending'}
-        >
-          {sortDirection === 'asc' ? '↑ Ascending' : '↓ Descending'}
-        </button>
+      <div className="flex items-center justify-between">
+        <div>
+          {/* Empty div to maintain spacing */}
+        </div>
+        
+        <div className="flex items-center">
+          <span className="text-sm font-medium text-gray-700 mr-3">Sort by:</span>
+          <div className="inline-flex shadow-sm rounded-md">
+            <button
+              onClick={() => handleSortClick('date')}
+              className={`px-4 py-2 text-sm font-medium rounded-l-md focus:z-10 focus:ring-2 focus:outline-none
+                ${sortBy === 'date' 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500' 
+                  : 'bg-white text-gray-700 hover:bg-gray-50 focus:ring-gray-200 border border-gray-300'}`}
+            >
+              Date {sortBy === 'date' && (sortDirection === 'desc' ? '↓' : '↑')}
+            </button>
+            <button
+              onClick={() => handleSortClick('likes')}
+              className={`px-4 py-2 text-sm font-medium focus:z-10 focus:ring-2 focus:outline-none border-t border-b 
+                ${sortBy === 'likes' 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 border-blue-600' 
+                  : 'bg-white text-gray-700 hover:bg-gray-50 focus:ring-gray-200 border-gray-300'}`}
+            >
+              Likes {sortBy === 'likes' && (sortDirection === 'desc' ? '↓' : '↑')}
+            </button>
+            <button
+              onClick={() => handleSortClick('replies')}
+              className={`px-4 py-2 text-sm font-medium rounded-r-md focus:z-10 focus:ring-2 focus:outline-none
+                ${sortBy === 'replies' 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500' 
+                  : 'bg-white text-gray-700 hover:bg-gray-50 focus:ring-gray-200 border border-gray-300'}`}
+            >
+              Replies {sortBy === 'replies' && (sortDirection === 'desc' ? '↓' : '↑')}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "include": ["app/api/comment-replies/route.ts"],
+      "weight": 3.0,
+      "description": "Main API route for fetching comment replies"
+    },
+    {
+      "include": ["components/comment/CommentItem.tsx", "components/comment/CommentReply.tsx"],
+      "weight": 3.0,
+      "description": "UI components for displaying comments and replies"
+    },
+    {
+      "include": ["lib/youtube.ts"],
+      "weight": 2.0,
+      "description": "Contains mapDbCommentToCommentData function"
+    },
+    {
+      "include": ["lib/types.ts"],
+      "weight": 2.0,
+      "description": "Contains CommentData type definition"
+    },
+    {
+      "include": ["app/api/debug-replies/route.ts", "app/api/fix-replies/route.ts", "app/api/update-reply-counts/route.ts"],
+      "weight": 1.5,
+      "description": "Related API routes for debugging and fixing replies"
+    },
+    {
+      "include": ["app/api/**/*.ts", "components/**/*.tsx", "lib/**/*.ts"],
+      "weight": 1.0,
+      "description": "General application code"
+    }
+  ],
+  "ignorePatterns": [
+    "node_modules/**", 
+    ".next/**", 
+    "public/**",
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ]
+} 

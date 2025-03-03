@@ -1,13 +1,63 @@
 import { NextRequest } from 'next/server';
 import { 
-  searchForChannel, 
-  fetchLatestChannelComments, 
-  mapYouTubeCommentToDbComment, 
-  ensureVideosExist,
-  fetchVideosByChannel,
+  fetchComments, 
+  fetchChannelInfo, 
+  mapYouTubeCommentToDbComment,
   fetchAllVideosByChannel 
 } from '@/lib/youtube';
 import { supabase } from '@/lib/supabase';
+
+// Define interfaces for better type safety
+interface ProgressData {
+  message?: string;
+  stage?: string;
+  current?: number;
+  total?: number;
+  percentage?: number;
+  videoTitle?: string;
+  videoId?: string;
+  commentsCount?: number;
+  [key: string]: any; // Allow additional properties
+}
+
+interface YouTubeVideo {
+  id: string | { videoId: string; } | { kind: string; videoId: string; };
+  snippet: {
+    title: string;
+    description?: string;
+    publishedAt?: string;
+    channelTitle?: string;
+    [key: string]: any;
+  };
+  [key: string]: any;
+}
+
+interface YouTubeComment {
+  id: string;
+  snippet: {
+    videoId?: string;
+    textDisplay?: string;
+    authorDisplayName?: string;
+    authorProfileImageUrl?: string;
+    likeCount?: number;
+    publishedAt?: string;
+    parentId?: string;
+    topLevelComment?: any;
+    canReply?: boolean;
+    totalReplyCount?: number;
+    [key: string]: any;
+  };
+  replies?: {
+    comments?: YouTubeComment[];
+  };
+  [key: string]: any;
+}
+
+interface YouTubeAPIResponse {
+  items?: any[];
+  nextPageToken?: string;
+  [key: string]: any;
+}
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -40,169 +90,203 @@ export async function GET(request: NextRequest) {
     async start(controller) {
       try {
         // Helper function to send progress updates
-        const sendProgress = (progress) => {
+        const sendProgress = (progress: ProgressData) => {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'progress', progress })}\n\n`));
         };
         
         // First, find the channel
-        sendProgress({ 
-          status: 'Searching for channel...',
-          currentVideo: '',
-          videosProcessed: 0,
-          totalVideos: 0,
-          commentsFound: 0
-        });
+        sendProgress({ stage: 'Finding channel', message: `Looking up channel "${channelName}"` });
         
-        const ytChannelId = await searchForChannel(channelName, apiKey);
+        // Get channel details from YouTube
+        const channelInfo = await fetchChannelInfo(channelName);
+        const channelId = channelInfo?.channelId;
         
-        // Check if channel already exists in the database
-        const { data: existingChannel, error: channelError } = await supabase
+        if (!channelId) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+            type: 'error', 
+            error: `Channel "${channelName}" not found. Please check the name and try again.` 
+          })}\n\n`));
+          return;
+        }
+        
+        // Check if this channel exists in our database
+        let { data: existingChannel, error: channelError } = await supabase
           .from('channels')
-          .select('*')
-          .eq('channel_id', ytChannelId)
+          .select('id, title')
+          .eq('channel_id', channelId)
           .single();
         
-        let dbChannelId;
-        let channelTitle;
+        let dbChannelId: string;
         
-        if (!existingChannel) {
-          // Fetch channel details from YouTube API
+        // If channel doesn't exist, create it
+        if (channelError || !existingChannel) {
           sendProgress({ 
-            status: 'Fetching channel details...',
-            currentVideo: '',
-            videosProcessed: 0,
-            totalVideos: 0,
-            commentsFound: 0
+            stage: 'Creating channel', 
+            message: `First time seeing this channel. Creating database entry for "${channelName}"` 
           });
           
-          const channelResponse = await fetch(
-            `https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${ytChannelId}&key=${apiKey}`
+          // Get more channel info from YouTube
+          const response = await fetch(
+            `https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${channelId}&key=${apiKey}`
           );
-          const channelData = await channelResponse.json();
           
-          if (!channelData.items || channelData.items.length === 0) {
-            throw new Error('Channel not found on YouTube');
+          if (!response.ok) {
+            throw new Error(`Failed to fetch channel details: ${response.statusText}`);
           }
           
-          const snippet = channelData.items[0].snippet;
-          channelTitle = snippet.title;
+          const channelData = await response.json();
+          const channelSnippet = channelData.items?.[0]?.snippet;
           
-          // Insert the channel into the database
+          if (!channelSnippet) {
+            throw new Error('Channel details not found');
+          }
+          
+          // Insert the new channel
           const { data: newChannel, error: insertError } = await supabase
             .from('channels')
             .insert({
-              channel_id: ytChannelId,
-              title: snippet.title,
-              description: snippet.description,
-              thumbnail_url: snippet.thumbnails.default.url,
-              user_id: '00000000-0000-0000-0000-000000000000' // Anonymous user ID
+              channel_id: channelId,
+              title: channelSnippet.title,
+              description: channelSnippet.description,
+              thumbnail_url: channelSnippet.thumbnails?.default?.url
             })
-            .select()
+            .select('id')
             .single();
           
-          if (insertError) {
-            throw new Error(`Failed to save channel: ${insertError.message}`);
+          if (insertError || !newChannel) {
+            throw new Error(`Failed to create channel: ${insertError?.message || 'Unknown error'}`);
           }
           
           dbChannelId = newChannel.id;
         } else {
           dbChannelId = existingChannel.id;
-          channelTitle = existingChannel.title;
+          sendProgress({ 
+            stage: 'Using existing channel', 
+            message: `Found existing channel "${existingChannel.title}" in database` 
+          });
         }
         
-        // Start fetching comments
+        // Now that we have the channel, fetch its videos
+        sendProgress({ stage: 'Fetching videos', message: 'Getting video list from YouTube' });
+        
+        let videos: YouTubeVideo[];
+        if (includeOldVideos) {
+          // Fetch all videos (might be slower)
+          videos = await fetchAllVideosByChannel(channelId, apiKey);
+        } else {
+          // Just fetch recent uploads (faster)
+          // If no fetchUserVideos is available, use fetchAllVideosByChannel with a limit
+          videos = await fetchAllVideosByChannel(channelId, apiKey).then(
+            allVideos => allVideos.slice(0, maxVideos)
+          );
+        }
+        
+        if (!videos || videos.length === 0) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+            type: 'error', 
+            error: `No videos found for channel "${channelName}"` 
+          })}\n\n`));
+          return;
+        }
+        
         sendProgress({ 
-          status: 'Preparing to fetch comments...',
-          currentVideo: '',
-          videosProcessed: 0,
-          totalVideos: 0,
-          commentsFound: 0
+          stage: 'Found videos', 
+          message: `Found ${videos.length} videos for this channel` 
         });
         
-        // Custom implementation to track progress for each video
-        const allVideos = includeOldVideos 
-          ? await fetchAllVideosByChannel(ytChannelId, apiKey)
-          : await fetchVideosByChannel(ytChannelId, apiKey).then(resp => resp.items || []);
+        // Check which videos we already have
+        const allVideoIds = videos.map(v => {
+          // Handle different video ID formats
+          if (typeof v.id === 'string') return v.id;
+          if ('videoId' in v.id) return v.id.videoId;
+          return '';
+        }).filter(Boolean);
         
-        // Sort and limit videos as needed
-        let processedVideos = [...allVideos];
-        if (!includeOldVideos) {
-          processedVideos.sort((a, b) => {
-            const dateA = new Date(a.snippet.publishedAt).getTime();
-            const dateB = new Date(b.snippet.publishedAt).getTime();
-            return dateB - dateA; // Newest first
-          });
-          
-          if (maxVideos !== -1) {
-            processedVideos = processedVideos.slice(0, maxVideos);
-          }
-        }
+        const { data: existingVideos } = await supabase
+          .from('videos')
+          .select('video_id')
+          .in('video_id', allVideoIds);
         
-        // Update total videos count in progress
+        const existingVideoIds = new Set(existingVideos?.map(v => v.video_id) || []);
+        
+        const newVideos = videos.filter(v => {
+          const videoId = typeof v.id === 'string' 
+            ? v.id 
+            : ('videoId' in v.id ? v.id.videoId : '');
+          return videoId && !existingVideoIds.has(videoId);
+        });
+        
+        const processedVideos = [...videos];
+        
         sendProgress({ 
-          status: 'Starting comment import...',
-          currentVideo: '',
-          videosProcessed: 0,
-          totalVideos: processedVideos.length,
-          commentsFound: 0
+          stage: 'Processing videos', 
+          message: `Processing ${videos.length} videos (${newVideos.length} new)` 
         });
         
         // Process videos and fetch comments
-        let allComments = [];
+        let allComments: YouTubeComment[] = [];
         let totalCommentsFound = 0;
         
         for (let i = 0; i < processedVideos.length; i++) {
           const video = processedVideos[i];
-          const videoId = video.id?.videoId || video.id;
+          const videoId = typeof video.id === 'string' 
+            ? video.id 
+            : ('videoId' in video.id ? video.id.videoId : '');
           const videoTitle = video.snippet.title;
           
           sendProgress({ 
-            status: 'Fetching comments...',
-            currentVideo: videoTitle,
-            videosProcessed: i,
-            totalVideos: processedVideos.length,
-            commentsFound: totalCommentsFound
+            stage: 'Fetching comments', 
+            message: `Getting comments for video ${i + 1} of ${processedVideos.length}`,
+            current: i + 1,
+            total: processedVideos.length,
+            percentage: Math.round(((i + 1) / processedVideos.length) * 100),
+            videoTitle,
+            videoId
           });
           
+          if (!videoId) {
+            console.error('Invalid video ID format:', video.id);
+            continue;
+          }
+          
           try {
-            // Fetch comments for this video
-            const videoComments = await fetchCommentsWithProgress(videoId, videoTitle, apiKey, includeReplies, (count) => {
-              totalCommentsFound += count;
-              sendProgress({ 
-                status: 'Fetching comments...',
-                currentVideo: videoTitle,
-                videosProcessed: i,
-                totalVideos: processedVideos.length,
-                commentsFound: totalCommentsFound
-              });
-            });
+            const videoComments = await fetchCommentsWithProgress(
+              videoId,
+              videoTitle,
+              apiKey,
+              includeReplies,
+              (count: number) => {
+                totalCommentsFound += count;
+                sendProgress({
+                  stage: 'Fetching comments',
+                  current: i + 1,
+                  total: processedVideos.length,
+                  percentage: Math.round(((i + 1) / processedVideos.length) * 100),
+                  videoTitle,
+                  videoId,
+                  commentsCount: count,
+                  message: `Found ${count} comments for "${videoTitle.substring(0, 40)}${videoTitle.length > 40 ? '...' : ''}"`
+                });
+              }
+            );
             
             allComments = [...allComments, ...videoComments];
           } catch (error) {
             console.error(`Error fetching comments for video ${videoId}:`, error);
           }
           
-          // Final update for this video
-          sendProgress({ 
-            status: 'Fetching comments...',
-            currentVideo: videoTitle,
-            videosProcessed: i + 1,
-            totalVideos: processedVideos.length,
-            commentsFound: totalCommentsFound
-          });
+          // Respect the max comments limit
+          if (totalCommentsFound >= maxComments) {
+            sendProgress({ 
+              stage: 'Max comments reached', 
+              message: `Reached maximum limit of ${maxComments} comments` 
+            });
+            break;
+          }
         }
         
-        // Now process and save all the comments
-        sendProgress({ 
-          status: 'Processing comments...',
-          currentVideo: '',
-          videosProcessed: processedVideos.length,
-          totalVideos: processedVideos.length,
-          commentsFound: totalCommentsFound
-        });
-        
         // Sort comments to ensure parent comments come before replies (more robustly)
-        const sortedComments = [...allComments].sort((a, b) => {
+        const sortedComments = [...allComments].sort((a: YouTubeComment, b: YouTubeComment) => {
           // Extract parent IDs (if any)
           const aParentId = a.snippet.parentId;
           const bParentId = b.snippet.parentId;
@@ -213,166 +297,130 @@ export async function GET(request: NextRequest) {
           // If b is a reply to a, a should come first
           if (bParentId === a.id) return -1;
           
-          // If only a is a reply, it should come after non-replies
+          // Put all top-level comments before all replies
           if (aParentId && !bParentId) return 1;
           
-          // If only b is a reply, it should come after non-replies
+          // Put all top-level comments before all replies
           if (!aParentId && bParentId) return -1;
           
-          // Otherwise maintain original order
-          return 0;
+          // If both are top-level or neither is a direct reply to the other,
+          // sort by published date (newest first)
+          const aDate = new Date(a.snippet.publishedAt || '').getTime() || 0;
+          const bDate = new Date(b.snippet.publishedAt || '').getTime() || 0;
+          
+          return bDate - aDate;
         });
         
-        // Then map the sorted comments
-        const mappedComments = sortedComments.map(comment => 
+        // Extract all video IDs from comments
+        const commentVideoIds = Array.from(new Set(allComments.map(comment => comment.snippet.videoId || '')))
+          .filter(Boolean);
+        
+        // Ensure all videos exist in the database
+        await ensureVideosExist(commentVideoIds, dbChannelId, apiKey);
+        
+        // Convert YouTube comment format to our database format
+        const dbComments = sortedComments.map(comment => 
           mapYouTubeCommentToDbComment(comment, dbChannelId)
         );
         
-        // Extract all video IDs from comments
-        const videoIds = Array.from(new Set(allComments.map(comment => comment.snippet.videoId)));
+        // Split the comments into batches of 100 for insertion
+        const batchSize = 100;
+        const batches = [];
         
-        // Ensure all videos exist in the database
-        await ensureVideosExist(videoIds, dbChannelId, apiKey);
-        
-        // Get existing comment IDs to avoid duplicates
-        let existingCommentIds = [];
-        
-        if (skipDuplicates && mappedComments.length > 0) {
-          const { data: existingComments } = await supabase
-            .from('comments')
-            .select('comment_id')
-            .eq('channel_id', dbChannelId);
-          
-          existingCommentIds = existingComments?.map(c => c.comment_id) || [];
+        for (let i = 0; i < dbComments.length; i += batchSize) {
+          batches.push(dbComments.slice(i, i + batchSize));
         }
         
-        // Filter out duplicates
-        const uniqueComments = skipDuplicates 
-          ? mappedComments.filter(c => !existingCommentIds.includes(c.comment_id))
-          : mappedComments;
-        
-        // Save to database in batches
-        let insertedCount = 0;
-        
         sendProgress({ 
-          status: 'Saving comments to database...',
-          currentVideo: '',
-          videosProcessed: processedVideos.length,
-          totalVideos: processedVideos.length,
-          commentsFound: totalCommentsFound
+          stage: 'Saving to database', 
+          message: `Saving ${dbComments.length} comments in ${batches.length} batches`,
+          total: batches.length,
+          current: 0
         });
         
-        // Batch the comments for insertion
-        const BATCH_SIZE = 50;
-        let errorCount = 0;
-        const MAX_ERRORS = 5; // Stop after 5 critical errors
-        for (let i = 0; i < uniqueComments.length && errorCount < MAX_ERRORS; i += BATCH_SIZE) {
-          const batch = uniqueComments.slice(i, i + BATCH_SIZE);
+        let newCommentsInserted = 0;
+        let skippedComments = 0;
+        
+        // Process each batch
+        for (let i = 0; i < batches.length; i++) {
+          const batch = batches[i];
+          sendProgress({ 
+            stage: 'Saving to database', 
+            message: `Processing batch ${i + 1} of ${batches.length}`,
+            current: i + 1,
+            total: batches.length,
+            percentage: Math.round(((i + 1) / batches.length) * 100)
+          });
           
-          try {
-            // First check if these comments already exist
-            const commentIds = batch.map(comment => comment.comment_id);
+          if (skipDuplicates) {
+            // Get comment IDs from this batch
+            const commentIds = batch.map(c => c.comment_id);
             
-            const { data: existingCommentsBatch, error: queryError } = await supabase
+            // Check which ones already exist
+            const { data: existingComments } = await supabase
               .from('comments')
               .select('comment_id')
               .in('comment_id', commentIds);
             
-            if (queryError) {
-              console.error('Error querying existing comments:', queryError);
-              errorCount++;
-              continue; // Skip this batch if we can't query existing comments
-            }
+            const existingIds = new Set(existingComments?.map(c => c.comment_id) || []);
             
-            const existingIds = new Set(existingCommentsBatch?.map(c => c.comment_id) || []);
+            // Filter out comments that already exist
+            const newComments = batch.filter(c => !existingIds.has(c.comment_id));
             
-            // Filter out any comments that already exist in the database
-            const newComments = batch.filter(comment => !existingIds.has(comment.comment_id));
+            // Update counts
+            skippedComments += batch.length - newComments.length;
             
-            // Check for parent-child relationships within this batch
-            // Ensure we insert parents first
-            const parentIds = new Set(newComments.map(c => c.parent_id).filter(Boolean));
-            const parentComments = newComments.filter(c => parentIds.has(c.comment_id));
-            const nonParentComments = newComments.filter(c => !parentIds.has(c.comment_id));
-            
-            // Insert parents first if any exist in this batch
-            if (parentComments.length > 0) {
-              const { error: parentError } = await supabase
+            // Insert only new comments
+            if (newComments.length > 0) {
+              const { data, error } = await supabase
                 .from('comments')
-                .insert(parentComments);
+                .insert(newComments);
               
-              if (parentError) {
-                console.error('Error inserting parent comments:', parentError);
-                errorCount++;
+              if (error) {
+                console.error('Error inserting comments:', error);
               } else {
-                insertedCount += parentComments.length;
-                console.log(`Inserted ${parentComments.length} parent comments`);
+                newCommentsInserted += newComments.length;
               }
             }
+          } else {
+            // Insert all comments using upsert
+            const { data, error } = await supabase
+              .from('comments')
+              .upsert(batch, { onConflict: 'comment_id' });
             
-            // Then insert the rest
-            if (nonParentComments.length > 0) {
-              const { error: insertError } = await supabase
-                .from('comments')
-                .insert(nonParentComments);
-              
-              if (insertError) {
-                console.error('Error inserting comments:', insertError);
-                
-                // Check if it's a foreign key error and increment error count
-                if (insertError.code === '23503') {
-                  errorCount++;
-                  console.error('Foreign key constraint error - possible missing parent comment');
-                }
-              } else {
-                insertedCount += nonParentComments.length;
-                console.log(`Inserted ${nonParentComments.length} comments`);
-              }
+            if (error) {
+              console.error('Error upserting comments:', error);
+            } else {
+              newCommentsInserted += batch.length;
             }
-            
-          } catch (error) {
-            console.error('Error processing batch:', error);
-            errorCount++;
-          }
-          
-          // Send progress update
-          sendProgress({
-            status: errorCount >= MAX_ERRORS 
-              ? `Import stopped after ${errorCount} errors. Inserted ${insertedCount} comments.`
-              : `Processed ${i + batch.length} of ${uniqueComments.length} comments (${insertedCount} inserted)`,
-            currentVideo: errorCount >= MAX_ERRORS ? 'Import stopped' : 'Processing complete',
-            videosProcessed: processedVideos.length,
-            totalVideos: processedVideos.length,
-            commentsFound: uniqueComments.length
-          });
-          
-          // Stop the process if we've hit the error threshold
-          if (errorCount >= MAX_ERRORS) {
-            console.log(`Import stopped after ${errorCount} errors`);
-            break;
           }
         }
         
-        // Complete the import with appropriate message
-        if (errorCount >= MAX_ERRORS) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-            type: 'error',
-            error: `Import stopped after ${errorCount} errors. Inserted ${insertedCount} comments.`
-          })}\n\n`));
-        } else {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-            type: 'complete',
-            commentCount: insertedCount,
-            channelTitle: channelTitle,
-            videosProcessed: processedVideos.length,
-            totalVideosAvailable: allVideos.length
-          })}\n\n`));
-        }
-        
-      } catch (error) {
+        // Send completion event
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          type: 'complete',
+          result: {
+            channel: {
+              id: dbChannelId,
+              name: channelName
+            },
+            videos: {
+              total: processedVideos.length,
+              processed: processedVideos.length
+            },
+            comments: {
+              total: totalCommentsFound,
+              processed: dbComments.length,
+              inserted: newCommentsInserted,
+              skipped: skippedComments
+            }
+          }
+        })}\n\n`));
+      } catch (error: unknown) {
+        console.error('Streaming error:', error);
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
           type: 'error',
-          error: error.message
+          error: error instanceof Error ? error.message : 'Unknown error occurred'
         })}\n\n`));
       } finally {
         controller.close();
@@ -389,54 +437,66 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// Helper function to fetch comments with progress tracking
 async function fetchCommentsWithProgress(
   videoId: string, 
   videoTitle: string,
   apiKey: string,
   includeReplies: boolean,
   progressCallback: (count: number) => void
-) {
-  let comments = [];
-  let commentNextPageToken;
+): Promise<YouTubeComment[]> {
+  let allComments: YouTubeComment[] = [];
+  let commentNextPageToken: string | null = null;
   let page = 1;
   
   do {
     console.log(`Fetching comments for video: ${videoTitle} (page ${page})`);
     
-    const url = `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet,replies&videoId=${videoId}&key=${apiKey}&maxResults=100${commentNextPageToken ? `&pageToken=${commentNextPageToken}` : ''}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    const fetchUrl: string = `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet,replies&videoId=${videoId}&key=${apiKey}&maxResults=100${commentNextPageToken ? `&pageToken=${commentNextPageToken}` : ''}`;
+    const response = await fetch(fetchUrl);
+    const data: YouTubeAPIResponse = await response.json();
     
     const videoComments = data.items || [];
     let newCommentsCount = 0;
     
-    // Add each comment and its replies
-    for (const comment of videoComments) {
-      comments.push({
-        ...comment,
-        snippet: {
-          ...comment.snippet,
-          videoTitle
-        }
-      });
-      newCommentsCount++;
+    // Process comment threads
+    for (const thread of videoComments) {
+      // Extract top-level comment
+      const topLevelComment = thread.snippet?.topLevelComment;
       
-      // Add replies if requested and available
-      if (includeReplies && comment.replies && comment.replies.comments) {
-        for (const reply of comment.replies.comments) {
-          comments.push({
-            id: reply.id,
-            snippet: {
-              videoId,
-              topLevelComment: {
-                snippet: reply.snippet
-              },
-              videoTitle,
-              parentId: comment.id
+      if (topLevelComment) {
+        // Ensure the comment has the video ID
+        if (topLevelComment.snippet) {
+          topLevelComment.snippet.videoId = videoId;
+          topLevelComment.snippet.videoTitle = videoTitle;
+        }
+        
+        allComments.push(topLevelComment);
+        newCommentsCount++;
+        
+        // Add replies if they exist and we want them
+        if (includeReplies && thread.replies && thread.replies.comments) {
+          const replies = thread.replies.comments;
+          
+          for (const reply of replies) {
+            // Ensure replies have videoId and are properly tagged as replies
+            if (reply.snippet) {
+              reply.snippet.videoId = videoId;
+              reply.snippet.videoTitle = videoTitle;
+              reply.snippet.parentId = topLevelComment.id;
             }
-          });
-          newCommentsCount++;
+            
+            allComments.push(reply);
+            newCommentsCount++;
+          }
+        }
+        
+        // If there are more replies than the first page (usually 5), fetch them
+        if (includeReplies && 
+            thread.snippet.totalReplyCount > (thread.replies?.comments?.length || 0) && 
+            thread.snippet.totalReplyCount > 5) {
+          
+          // We'll need to fetch additional replies in separate API calls
+          // This would be a good place to add that logic if needed
         }
       }
     }
@@ -444,16 +504,86 @@ async function fetchCommentsWithProgress(
     // Report progress
     progressCallback(newCommentsCount);
     
-    // Get next page token
-    commentNextPageToken = data.nextPageToken;
+    // Get the next page token
+    commentNextPageToken = data.nextPageToken || null;
     page++;
     
-    // Add a small delay to avoid API rate limits
+    // Respect YouTube's rate limits - pause between requests
     if (commentNextPageToken) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
-    
   } while (commentNextPageToken);
   
-  return comments;
+  return allComments;
+}
+
+// Ensure videos exist in our database
+async function ensureVideosExist(videoIds: string[], channelId: string, apiKey: string) {
+  // First check which ones we already have
+  const { data: existingVideos } = await supabase
+    .from('videos')
+    .select('video_id')
+    .in('video_id', videoIds);
+  
+  const existingVideoIds = new Set(existingVideos?.map(v => v.video_id) || []);
+  const missingVideoIds = videoIds.filter(id => !existingVideoIds.has(id));
+  
+  if (missingVideoIds.length === 0) {
+    return;
+  }
+  
+  console.log(`Fetching details for ${missingVideoIds.length} videos`);
+  
+  // Fetch details in batches of 50 (YouTube API limit)
+  const batchSize = 50;
+  
+  for (let i = 0; i < missingVideoIds.length; i += batchSize) {
+    const batch = missingVideoIds.slice(i, i + batchSize);
+    const idsParam = batch.join(',');
+    
+    const response = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${idsParam}&key=${apiKey}`
+    );
+    
+    if (!response.ok) {
+      console.error(`Failed to fetch video details: ${response.statusText}`);
+      continue;
+    }
+    
+    const data = await response.json();
+    
+    if (!data.items || data.items.length === 0) {
+      console.log('No video details returned from YouTube API');
+      continue;
+    }
+    
+    // Convert to our format
+    const videosToInsert = data.items.map((item: any) => ({
+      video_id: item.id,
+      title: item.snippet?.title || 'Unknown Title',
+      description: item.snippet?.description || '',
+      thumbnail_url: item.snippet?.thumbnails?.medium?.url || '',
+      view_count: parseInt(item.statistics?.viewCount || '0'),
+      like_count: parseInt(item.statistics?.likeCount || '0'),
+      comment_count: parseInt(item.statistics?.commentCount || '0'),
+      published_at: item.snippet?.publishedAt || new Date().toISOString(),
+      channel_id: channelId
+    }));
+    
+    // Insert the videos
+    const { error } = await supabase
+      .from('videos')
+      .insert(videosToInsert);
+    
+    if (error) {
+      console.error('Error inserting videos:', error);
+    } else {
+      console.log(`Inserted ${videosToInsert.length} videos into database`);
+    }
+    
+    // Respect rate limits
+    if (i + batchSize < missingVideoIds.length) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+  }
 } 

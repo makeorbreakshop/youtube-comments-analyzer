@@ -5,62 +5,62 @@ import { mapDbCommentToCommentData } from '@/lib/youtube';
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const commentId = searchParams.get('commentId');
-  
+
   console.log(`🔄 API: Fetching replies for comment ID: ${commentId}`);
   
   if (!commentId) {
-    return NextResponse.json({ error: 'Comment ID is required' }, { status: 400 });
+    return NextResponse.json({ error: 'Missing comment ID' }, { status: 400 });
   }
-  
+
   try {
-    // 1. Get this specific parent comment
+    // Get the parent comment first to verify it exists
     const { data: parentComment, error: parentError } = await supabase
       .from('comments')
       .select('*')
       .eq('comment_id', commentId)
       .single();
     
-    if (parentError || !parentComment) {
-      console.error('❌ Parent comment not found:', commentId);
-      return NextResponse.json({ 
-        error: 'Parent comment not found', 
-        replies: [],
-        count: 0
-      }, { status: 404 });
+    if (parentError) {
+      return NextResponse.json({ error: parentError.message }, { status: 500 });
     }
     
-    console.log(`✅ Found parent comment: ${parentComment.comment_id}`);
+    if (!parentComment) {
+      return NextResponse.json({ error: 'Parent comment not found' }, { status: 404 });
+    }
     
-    // 2. Fetch all replies for this comment
+    // Get all replies for this comment
     const { data: replies, error: repliesError } = await supabase
       .from('comments')
       .select('*')
       .eq('parent_id', commentId)
-      .order('published_at', { ascending: true });
+      .order('published_at', { ascending: false });
     
     if (repliesError) {
-      console.error('❌ Error fetching replies:', repliesError);
       return NextResponse.json({ error: repliesError.message }, { status: 500 });
     }
     
-    console.log(`📊 Found ${replies?.length || 0} replies for comment ${commentId}`);
+    console.log(`Found ${replies?.length || 0} replies for comment ${commentId}`);
+
+    // Get the actual count directly from the database
+    const { count, error: countError } = await supabase
+      .from('comments')
+      .select('*', { count: 'exact', head: true })
+      .eq('parent_id', commentId);
     
-    // Log the first few replies to help debug
-    if (replies && replies.length > 0) {
-      replies.slice(0, 3).forEach((reply, i) => {
-        console.log(`Reply ${i+1}: ID=${reply.comment_id}, Parent=${reply.parent_id}, Text=${reply.text.substring(0, 50)}...`);
-      });
+    if (countError) {
+      console.error('Error counting replies:', countError);
     }
+
+    // Map all replies to the expected format
+    const mappedReplies = (replies || []).map(reply => mapDbCommentToCommentData(reply));
     
-    // Transform the comments to frontend format
-    const formattedReplies = replies?.map(mapDbCommentToCommentData) || [];
-    
-    return NextResponse.json({ 
-      replies: formattedReplies,
-      count: formattedReplies.length
+    // Respond with the replies and the count
+    return NextResponse.json({
+      replies: mappedReplies,
+      replyCount: count || mappedReplies.length,
     });
   } catch (error) {
-    console.error('❌ Server error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Error fetching comment replies:', error);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 } 
