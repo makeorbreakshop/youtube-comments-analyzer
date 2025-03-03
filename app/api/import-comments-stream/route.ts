@@ -7,6 +7,11 @@ import {
 } from '@/lib/youtube';
 import { supabase } from '@/lib/supabase';
 
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
+export const runtime = 'nodejs';
+
 // Define interfaces for better type safety
 interface ProgressData {
   message?: string;
