@@ -676,4 +676,81 @@ export async function updateCommentReplyCounts() {
   } catch (error) {
     console.error('Error updating reply counts:', error);
   }
+}
+
+/**
+ * Fetches channel information from YouTube API using access token
+ */
+export async function fetchChannelInfo(accessToken: string) {
+  try {
+    const response = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch channels: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data.items || [];
+  } catch (error) {
+    console.error('Error fetching channel info:', error);
+    throw error;
+  }
+}
+
+/**
+ * Ensures videos exist in the database
+ */
+export async function ensureVideosExist(videoIds: string[], channelId: string, apiKey: string) {
+  try {
+    // Check which videos already exist in the database
+    const { data: existingVideos } = await supabase
+      .from('videos')
+      .select('video_id')
+      .in('video_id', videoIds);
+    
+    const existingVideoIds = existingVideos?.map(v => v.video_id) || [];
+    const missingVideoIds = videoIds.filter(id => !existingVideoIds.includes(id));
+    
+    if (missingVideoIds.length === 0) {
+      return true; // All videos already exist
+    }
+    
+    // Fetch details for missing videos from YouTube API
+    const videoDetailsPromises = missingVideoIds.map(async (videoId) => {
+      const videoResponse = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`
+      );
+      return videoResponse.json();
+    });
+    
+    const videoDetailsResponses = await Promise.all(videoDetailsPromises);
+    
+    // Insert missing videos into database
+    for (const response of videoDetailsResponses) {
+      if (response.items?.length > 0) {
+        for (const item of response.items) {
+          const snippet = item.snippet;
+          await supabase
+            .from('videos')
+            .insert({
+              video_id: item.id,
+              channel_id: channelId,
+              title: snippet.title,
+              description: snippet.description,
+              thumbnail_url: snippet.thumbnails?.default?.url || null,
+              published_at: snippet.publishedAt
+            });
+        }
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error ensuring videos exist:', error);
+    throw error;
+  }
 } 

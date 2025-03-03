@@ -20,17 +20,15 @@ interface CommentsListProps {
   comments: Comment[];
 }
 
-export default function CommentsList({ comments }: CommentsListProps) {
-  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+export function CommentsList({ comments }: CommentsListProps) {
+  const [expandedComments, setExpandedComments] = useState<string[]>([]);
 
   const toggleComment = (commentId: string) => {
-    const newExpanded = new Set(expandedComments);
-    if (newExpanded.has(commentId)) {
-      newExpanded.delete(commentId);
+    if (expandedComments.includes(commentId)) {
+      setExpandedComments(expandedComments.filter(id => id !== commentId));
     } else {
-      newExpanded.add(commentId);
+      setExpandedComments([...expandedComments, commentId]);
     }
-    setExpandedComments(newExpanded);
   };
 
   if (comments.length === 0) {
@@ -74,7 +72,7 @@ export default function CommentsList({ comments }: CommentsListProps) {
                     onClick={() => toggleComment(comment.id)}
                     className="mt-2 flex items-center text-sm text-gray-600 hover:text-gray-900"
                   >
-                    {expandedComments.has(comment.id) ? (
+                    {expandedComments.includes(comment.id) ? (
                       <>
                         <ChevronUp className="h-4 w-4 mr-1" />
                         Hide replies
@@ -92,7 +90,7 @@ export default function CommentsList({ comments }: CommentsListProps) {
           </div>
           
           {/* Replies section - would fetch from API in a real implementation */}
-          {expandedComments.has(comment.id) && (
+          {expandedComments.includes(comment.id) && (
             <div className="bg-gray-50 px-4 py-3 border-t border-gray-200">
               <div className="pl-14">
                 <p className="text-sm text-gray-500">
