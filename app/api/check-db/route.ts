@@ -16,9 +16,11 @@ export async function GET() {
     .eq('parent_id', replies?.[0]?.parent_id)
     .limit(1);
   
+  const replyCount = count || 0;
+  
   return NextResponse.json({
-    repliesExist: count > 0,
-    totalRepliesInDb: count,
+    repliesExist: replyCount > 0,
+    totalRepliesInDb: replyCount,
     sampleReplies: replies,
     sampleParent: parentWithReplies?.[0] || null
   });
