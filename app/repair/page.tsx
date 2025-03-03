@@ -2,12 +2,22 @@
 
 import { useState, useEffect } from 'react';
 
+// Define types for better TypeScript support
+type RepairStatus = 'idle' | 'running' | 'complete' | 'error';
+type BatchResult = {
+  batchNumber: number;
+  repliesProcessed: number;
+  repliesWithParents: number;
+  repliesWithoutParents: number;
+  parentsUpdated: number;
+};
+
 export default function RepairPage() {
-  const [status, setStatus] = useState('idle');
-  const [results, setResults] = useState<any[]>([]);
+  const [status, setStatus] = useState<RepairStatus>('idle');
+  const [results, setResults] = useState<BatchResult[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
   async function startRepairProcess(resetCounts = false) {
@@ -27,7 +37,7 @@ export default function RepairPage() {
     }
   }
   
-  async function processNextBatch(page, reset = false) {
+  async function processNextBatch(page: number, reset = false) {
     try {
       setCurrentPage(page);
       
