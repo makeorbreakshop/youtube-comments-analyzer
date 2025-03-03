@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     
     if (resetError) {
       console.error('Error resetting counts:', resetError);
-      return NextResponse.json({ error: resetError.message }, { status: 500 });
+      return NextResponse.json({ error: resetError instanceof Error ? resetError.message : 'An unknown error occurred' }, { status: 500 });
     }
     
     // 2. Get ALL replies (comments with a parent_id)
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     
     if (repliesError) {
       console.error('Error fetching replies:', repliesError);
-      return NextResponse.json({ error: repliesError.message }, { status: 500 });
+      return NextResponse.json({ error: repliesError instanceof Error ? repliesError.message : 'An unknown error occurred' }, { status: 500 });
     }
     
     if (!allReplies || allReplies.length === 0) {

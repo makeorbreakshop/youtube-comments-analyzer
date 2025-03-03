@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       .single();
     
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'An unknown error occurred' }, { status: 500 });
     }
     
     if (!data) {
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       .eq('parent_id', commentId);
     
     if (countError) {
-      return NextResponse.json({ error: countError.message }, { status: 500 });
+      return NextResponse.json({ error: countError instanceof Error ? countError.message : 'An unknown error occurred' }, { status: 500 });
     }
     
     return NextResponse.json({

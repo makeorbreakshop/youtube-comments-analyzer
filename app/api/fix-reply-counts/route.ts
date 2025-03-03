@@ -58,10 +58,8 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Error fixing reply counts:', error);
-    return NextResponse.json({ 
-      error: 'Server error while fixing reply counts' 
-    }, { status: 500 });
+    console.error('Error:', error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'An unknown error occurred' }, { status: 500 });
   }
 }
 
@@ -75,7 +73,7 @@ async function fixReplyCountForComment(commentId: string) {
     
     if (countError) {
       console.error(`Error counting replies for ${commentId}:`, countError);
-      return { success: false, error: countError.message };
+      return { success: false, error: countError instanceof Error ? countError.message : 'An unknown error occurred' };
     }
     
     // Update the comment's reply_count value
@@ -86,7 +84,7 @@ async function fixReplyCountForComment(commentId: string) {
     
     if (updateError) {
       console.error(`Error updating reply count for ${commentId}:`, updateError);
-      return { success: false, error: updateError.message };
+      return { success: false, error: updateError instanceof Error ? updateError.message : 'An unknown error occurred' };
     }
     
     return { success: true, updatedCount: count };

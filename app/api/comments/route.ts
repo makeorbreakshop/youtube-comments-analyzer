@@ -189,7 +189,7 @@ async function getFilteredComments(
     
     if (error) {
       console.error('Error fetching comments:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'An unknown error occurred' }, { status: 500 });
     }
     
     // Get video options for filter dropdown
@@ -256,12 +256,77 @@ export async function POST(request: Request) {
       .select();
     
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'An unknown error occurred' }, { status: 500 });
     }
     
     return NextResponse.json({ success: true, comment: data });
   } catch (error) {
     console.error("Error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
+// Create a separate POST endpoint for updating comments
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { commentId, updatedComment } = body;
+    
+    if (!commentId || !updatedComment) {
+      return NextResponse.json({ error: "Comment ID and updated comment are required" }, { status: 400 });
+    }
+
+    // Process and update the comment
+    const { data, error } = await supabase
+      .from('comments')
+      .update({
+        video_id: updatedComment.video_id,
+        author_name: updatedComment.author_name,
+        author_profile_url: updatedComment.author_profile_url,
+        text: updatedComment.text,
+        like_count: updatedComment.like_count,
+        published_at: updatedComment.published_at,
+        channel_id: updatedComment.channel_id,
+        is_owner_comment: updatedComment.is_owner_comment,
+        parent_id: updatedComment.parent_id,
+      })
+      .eq('comment_id', commentId)
+      .select();
+    
+    if (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'An unknown error occurred' }, { status: 500 });
+    }
+    
+    return NextResponse.json({ success: true, comment: data });
+  } catch (error) {
+    console.error('Error updating comment:', error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'An unknown error occurred' }, { status: 500 });
+  }
+}
+
+// Create a separate POST endpoint for deleting comments
+export async function DELETE(request: Request) {
+  const url = new URL(request.url);
+  const commentId = url.searchParams.get('commentId');
+  
+  if (!commentId) {
+    return NextResponse.json({ error: "Comment ID is required" }, { status: 400 });
+  }
+
+  try {
+    // Delete the comment
+    const { data, error } = await supabase
+      .from('comments')
+      .delete()
+      .eq('comment_id', commentId);
+    
+    if (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'An unknown error occurred' }, { status: 500 });
+    }
+    
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting comment:', error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'An unknown error occurred' }, { status: 500 });
   }
 } 

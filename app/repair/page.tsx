@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 
 export default function RepairPage() {
   const [status, setStatus] = useState('idle');
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   
   async function startRepairProcess(resetCounts = false) {
     setStatus('running');
@@ -15,11 +16,13 @@ export default function RepairPage() {
     setCurrentPage(1);
     setProgress(0);
     setError(null);
+    setIsLoading(true);
     
     try {
       await processNextBatch(1, resetCounts);
     } catch (err) {
-      setError(err.message);
+      setIsLoading(false);
+      setError(err instanceof Error ? err.message : 'Unknown error');
       setStatus('error');
     }
   }
@@ -49,8 +52,8 @@ export default function RepairPage() {
         setStatus('complete');
       }
     } catch (err) {
-      console.error('Error processing batch:', err);
-      setError(err.message);
+      setIsLoading(false);
+      setError(err instanceof Error ? err.message : 'Unknown error');
       setStatus('error');
     }
   }

@@ -103,8 +103,8 @@ export async function GET(request: Request) {
     
     // Calculate progress
     const processedSoFar = page * BATCH_SIZE;
-    const percentComplete = Math.min(100, Math.round((processedSoFar / totalReplies) * 100));
-    const hasMoreBatches = processedSoFar < totalReplies;
+    const percentComplete = Math.min(100, Math.round((processedSoFar / (totalReplies ?? 1)) * 100));
+    const hasMoreBatches = processedSoFar < (totalReplies ?? 0);
     
     // Return detailed status
     return NextResponse.json({
@@ -121,7 +121,7 @@ export async function GET(request: Request) {
         processedSoFar,
         totalReplies,
         percentComplete,
-        remainingReplies: totalReplies - processedSoFar
+        remainingReplies: (totalReplies ?? 0) - processedSoFar
       },
       nextBatch: hasMoreBatches ? `/api/repair-all-comments?page=${page + 1}` : null
     });
@@ -130,7 +130,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: false,
       error: 'Repair process failed',
-      details: error.message,
+      details: error instanceof Error ? error.message : String(error),
       page
     }, { status: 500 });
   }

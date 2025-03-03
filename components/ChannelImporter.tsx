@@ -101,8 +101,8 @@ export default function ChannelImporter({ onImportSuccess }: ChannelImporterProp
         clearTimeout(connectionTimeout);
       };
     } catch (error) {
-      setError(`Error starting import: ${error.message}`);
       setLoading(false);
+      setError(`Error starting import: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
