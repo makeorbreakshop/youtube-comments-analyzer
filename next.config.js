@@ -6,7 +6,7 @@ const nextConfig = {
     domains: ['lh3.googleusercontent.com', 'yt3.ggpht.com'],
   },
   experimental: {
-    serverActions: true,
+    // Remove serverActions as it's now available by default
   },
   // Disable static generation for pages with auth components
   output: 'standalone',
