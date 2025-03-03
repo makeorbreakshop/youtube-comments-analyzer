@@ -1,10 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    // This enables dynamic rendering for routes that need it
-    // rather than attempting to statically generate everything
-    serverActions: true,
+  experimental: {},
+  output: 'standalone',
+  dynamicRoutes: ['/api/:path*'],
+  excludeStaticRoutes: ['/**/api/**/*'],
+  generateStaticParams: {
+    retryCount: 0,
+    disableForRoutes: ['/api/**']
   },
   images: {
     domains: [
